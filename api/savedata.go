@@ -34,6 +34,17 @@ func (s *Server) handleSavedataGet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		compensations, err := db.FetchAndClaimAccountCompensations(uuid)
+		if err != nil {
+			httpError(w, r, fmt.Sprintf("failed to fetch compensations: %s", err), http.StatusInternalServerError)
+			return
+		}
+
+		for k, v := range compensations {
+			typeKey := strconv.Itoa(k)
+			system.VoucherCounts[typeKey] += v
+		}
+
 		saveJson, err := json.Marshal(system)
 		if err != nil {
 			httpError(w, r, fmt.Sprintf("failed to marshal save to json: %s", err), http.StatusInternalServerError)
@@ -133,6 +144,8 @@ func (s *Server) handleSavedataUpdate(w http.ResponseWriter, r *http.Request) {
 			httpError(w, r, fmt.Sprintf("failed to write save file: %s", err), http.StatusInternalServerError)
 			return
 		}
+
+		db.DeleteClaimedAccountCompensations(uuid)
 	case "1": // Session
 		slotId, err := strconv.Atoi(r.URL.Query().Get("slot"))
 		if err != nil {
