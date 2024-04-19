@@ -12,6 +12,7 @@ import (
 	"github.com/pagefaultgames/pokerogue-server/api/daily"
 	"github.com/pagefaultgames/pokerogue-server/api/savedata"
 	"github.com/pagefaultgames/pokerogue-server/defs"
+	"github.com/valyala/fasthttp"
 )
 
 /*
@@ -20,146 +21,135 @@ import (
 	Handlers should not return serialized JSON, instead return the struct itself.
 */
 
-func handleAccountInfo(w http.ResponseWriter, r *http.Request) {
-	username, err := getUsernameFromRequest(r)
+func HandleAccountInfo(ctx *fasthttp.RequestCtx) {
+	username, err := usernameFromTokenHeader(string(ctx.Request.Header.Peek("Authorization")))
 	if err != nil {
-		httpError(w, r, err, http.StatusBadRequest)
+		httpError(ctx, err, http.StatusBadRequest)
 		return
 	}
 
-	uuid, err := getUUIDFromRequest(r) // lazy
+	uuid, err := uuidFromTokenHeader(string(ctx.Request.Header.Peek("Authorization"))) // lazy
 	if err != nil {
-		httpError(w, r, err, http.StatusBadRequest)
+		httpError(ctx, err, http.StatusBadRequest)
 		return
 	}
 
 	response, err := account.Info(username, uuid)
 	if err != nil {
-		httpError(w, r, err, http.StatusInternalServerError)
+		httpError(ctx, err, http.StatusInternalServerError)
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(response)
+	err = json.NewEncoder(ctx.Response.BodyWriter()).Encode(response)
 	if err != nil {
-		httpError(w, r, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
-		return
-	}
-}
-
-func handleAccountRegister(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
-	if err != nil {
-		httpError(w, r, fmt.Errorf("failed to parse request form: %s", err), http.StatusBadRequest)
-		return
-	}
-
-	err = account.Register(r.Form.Get("username"), r.Form.Get("password"))
-	if err != nil {
-		httpError(w, r, err, http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
-
-func handleAccountLogin(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
-	if err != nil {
-		httpError(w, r, fmt.Errorf("failed to parse request form: %s", err), http.StatusBadRequest)
-		return
-	}
-
-	response, err := account.Login(r.Form.Get("username"), r.Form.Get("password"))
-	if err != nil {
-		httpError(w, r, err, http.StatusInternalServerError)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(response)
-	if err != nil {
-		httpError(w, r, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
+		httpError(ctx, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
 		return
 	}
 }
 
-func handleAccountLogout(w http.ResponseWriter, r *http.Request) {
-	token, err := base64.StdEncoding.DecodeString(r.Header.Get("Authorization"))
+func HandleAccountRegister(ctx *fasthttp.RequestCtx) {
+	err := account.Register(string(ctx.PostArgs().Peek("username")), string(ctx.PostArgs().Peek("password")))
 	if err != nil {
-		httpError(w, r, fmt.Errorf("failed to decode token: %s", err), http.StatusBadRequest)
+		httpError(ctx, err, http.StatusInternalServerError)
+		return
+	}
+
+	ctx.SetStatusCode(http.StatusOK)
+}
+
+func HandleAccountLogin(ctx *fasthttp.RequestCtx) {
+	response, err := account.Login(string(ctx.PostArgs().Peek("username")), string(ctx.PostArgs().Peek("password")))
+	if err != nil {
+		httpError(ctx, err, http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(ctx.Response.BodyWriter()).Encode(response)
+	if err != nil {
+		httpError(ctx, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
+		return
+	}
+}
+
+func HandleAccountLogout(ctx *fasthttp.RequestCtx) {
+	token, err := base64.StdEncoding.DecodeString(string(ctx.Request.Header.Peek("Authorization")))
+	if err != nil {
+		httpError(ctx, fmt.Errorf("failed to decode token: %s", err), http.StatusBadRequest)
 		return
 	}
 
 	err = account.Logout(token)
 	if err != nil {
-		httpError(w, r, err, http.StatusInternalServerError)
+		httpError(ctx, err, http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	ctx.SetStatusCode(http.StatusOK)
 }
 
-func handleGamePlayerCount(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(strconv.Itoa(playerCount)))
+func HandleGamePlayerCount(ctx *fasthttp.RequestCtx) {
+	ctx.SetBody([]byte(strconv.Itoa(playerCount)))
 }
 
-func handleGameTitleStats(w http.ResponseWriter, r *http.Request) {
-	err := json.NewEncoder(w).Encode(defs.TitleStats{
+func HandleGameTitleStats(ctx *fasthttp.RequestCtx) {
+	err := json.NewEncoder(ctx.Response.BodyWriter()).Encode(defs.TitleStats{
 		PlayerCount: playerCount,
 		BattleCount: battleCount,
 	})
 	if err != nil {
-		httpError(w, r, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
+		httpError(ctx, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
 		return
 	}
 }
 
-func handleGameClassicSessionCount(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(strconv.Itoa(classicSessionCount)))
+func HandleGameClassicSessionCount(ctx *fasthttp.RequestCtx) {
+	ctx.SetBody([]byte(strconv.Itoa(classicSessionCount)))
 }
 
-func handleSaveData(w http.ResponseWriter, r *http.Request) {
-	uuid, err := getUUIDFromRequest(r)
+func HandleSaveData(ctx *fasthttp.RequestCtx) {
+	uuid, err := uuidFromTokenHeader(string(ctx.Request.Header.Peek("Authorization")))
 	if err != nil {
-		httpError(w, r, err, http.StatusBadRequest)
+		httpError(ctx, err, http.StatusBadRequest)
 		return
 	}
 
 	datatype := -1
-	if r.URL.Query().Has("datatype") {
-		datatype, err = strconv.Atoi(r.URL.Query().Get("datatype"))
+	
+	if ctx.QueryArgs().Has("datatype") {
+		datatype, err = strconv.Atoi(string(ctx.QueryArgs().Peek("datatype")))
 		if err != nil {
-			httpError(w, r, err, http.StatusBadRequest)
+			httpError(ctx, err, http.StatusBadRequest)
 			return
 		}
 	}
 
 	var slot int
-	if r.URL.Query().Has("slot") {
-		slot, err = strconv.Atoi(r.URL.Query().Get("slot"))
+	if ctx.QueryArgs().Has("slot") {
+		slot, err = strconv.Atoi(string(ctx.QueryArgs().Peek("slot")))
 		if err != nil {
-			httpError(w, r, err, http.StatusBadRequest)
+			httpError(ctx, err, http.StatusBadRequest)
 			return
 		}
 	}
 
 	var save any
 	// /savedata/get and /savedata/delete specify datatype, but don't expect data in body
-	if r.URL.Path != "/api/savedata/get" && r.URL.Path != "/api/savedata/delete" {
+	if string(ctx.Path()) != "/api/savedata/get" && string(ctx.Path()) != "/api/savedata/delete" {
 		if datatype == 0 {
 			var system defs.SystemSaveData
-			err = json.NewDecoder(r.Body).Decode(&system)
+			err = json.Unmarshal(ctx.Request.Body(), &system)
 			if err != nil {
-				httpError(w, r, fmt.Errorf("failed to decode request body: %s", err), http.StatusBadRequest)
+				httpError(ctx, fmt.Errorf("failed to unmarshal request body: %s", err), http.StatusBadRequest)
 				return
 			}
 
 			save = system
 		// /savedata/clear doesn't specify datatype, it is assumed to be 1 (session)
-		} else if datatype == 1 || r.URL.Path == "/api/savedata/clear" {
+		} else if datatype == 1 || string(ctx.Path()) == "/api/savedata/clear" {
 			var session defs.SessionSaveData
-			err = json.NewDecoder(r.Body).Decode(&session)
+			err = json.Unmarshal(ctx.Request.Body(), &session)
 			if err != nil {
-				httpError(w, r, fmt.Errorf("failed to decode request body: %s", err), http.StatusBadRequest)
+				httpError(ctx, fmt.Errorf("failed to unmarshal request body: %s", err), http.StatusBadRequest)
 				return
 			}
 
@@ -167,7 +157,7 @@ func handleSaveData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	switch r.URL.Path {
+	switch string(ctx.Path()) {
 	case "/api/savedata/get":
 		save, err = savedata.Get(uuid, datatype, slot)
 	case "/api/savedata/update":
@@ -177,7 +167,7 @@ func handleSaveData(w http.ResponseWriter, r *http.Request) {
 	case "/api/savedata/clear":
 		s, ok := save.(defs.SessionSaveData)
 		if !ok {
-			httpError(w, r, fmt.Errorf("save data is not type SessionSaveData"), http.StatusBadRequest)
+			httpError(ctx, fmt.Errorf("save data is not type SessionSaveData"), http.StatusBadRequest)
 			return
 		}
 
@@ -185,84 +175,86 @@ func handleSaveData(w http.ResponseWriter, r *http.Request) {
 		save, err = savedata.Clear(uuid, slot, daily.Seed(), s)
 	}
 	if err != nil {
-		httpError(w, r, err, http.StatusInternalServerError)
+		httpError(ctx, err, http.StatusInternalServerError)
 		return
 	}
 
-	if save == nil || r.URL.Path == "/api/savedata/update" {
-		w.WriteHeader(http.StatusOK)
+	if save == nil || string(ctx.Path()) == "/api/savedata/update" {
+		ctx.SetStatusCode(http.StatusOK)
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(save)
+	err = json.NewEncoder(ctx.Response.BodyWriter()).Encode(save)
 	if err != nil {
-		httpError(w, r, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
+		httpError(ctx, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
 		return
 	}
 }
 
-func handleDailySeed(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(daily.Seed()))
+func HandleDailySeed(ctx *fasthttp.RequestCtx) {
+	ctx.Response.SetBody([]byte(daily.Seed()))
 }
 
-func handleDailyRankings(w http.ResponseWriter, r *http.Request) {
-	uuid, err := getUUIDFromRequest(r)
+func HandleDailyRankings(ctx *fasthttp.RequestCtx) {
+	uuid, err := uuidFromTokenHeader(string(ctx.Request.Header.Peek("Authorization")))
 	if err != nil {
-		httpError(w, r, err, http.StatusBadRequest)
+		httpError(ctx, err, http.StatusBadRequest)
 		return
 	}
 
 	var category int
-	if r.URL.Query().Has("category") {
-		category, err = strconv.Atoi(r.URL.Query().Get("category"))
+	
+	if ctx.QueryArgs().Has("category") {
+		category, err = strconv.Atoi(string(ctx.QueryArgs().Peek("category")))
 		if err != nil {
-			httpError(w, r, fmt.Errorf("failed to convert category: %s", err), http.StatusBadRequest)
+			httpError(ctx, fmt.Errorf("failed to convert category: %s", err), http.StatusBadRequest)
 			return
 		}
 	}
 
 	page := 1
-	if r.URL.Query().Has("page") {
-		page, err = strconv.Atoi(r.URL.Query().Get("page"))
+	if ctx.QueryArgs().Has("page") {
+		page, err = strconv.Atoi(string(ctx.QueryArgs().Peek("page")))
 		if err != nil {
-			httpError(w, r, fmt.Errorf("failed to convert page: %s", err), http.StatusBadRequest)
+			httpError(ctx, fmt.Errorf("failed to convert page: %s", err), http.StatusBadRequest)
 			return
 		}
 	}
 
 	rankings, err := daily.Rankings(uuid, category, page)
 	if err != nil {
-		httpError(w, r, err, http.StatusInternalServerError)
+		httpError(ctx, err, http.StatusInternalServerError)
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(rankings)
+	err = json.NewEncoder(ctx.Response.BodyWriter()).Encode(rankings)
 	if err != nil {
-		httpError(w, r, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
+		httpError(ctx, fmt.Errorf("failed to encode response json: %s", err), http.StatusInternalServerError)
 		return
 	}
 }
 
-func handleDailyRankingPageCount(w http.ResponseWriter, r *http.Request) {
+func HandleDailyRankingPageCount(ctx *fasthttp.RequestCtx) {
 	var category int
-	if r.URL.Query().Has("category") {
+	if ctx.QueryArgs().Has("category") {
 		var err error
-		category, err = strconv.Atoi(r.URL.Query().Get("category"))
+		category, err = strconv.Atoi(string(ctx.QueryArgs().Peek("category")))
 		if err != nil {
-			httpError(w, r, fmt.Errorf("failed to convert category: %s", err), http.StatusBadRequest)
+			httpError(ctx, fmt.Errorf("failed to convert category: %s", err), http.StatusBadRequest)
 			return
 		}
 	}
 
 	count, err := daily.RankingPageCount(category)
 	if err != nil {
-		httpError(w, r, err, http.StatusInternalServerError)
+		httpError(ctx, err, http.StatusInternalServerError)
+		return
 	}
 
-	w.Write([]byte(strconv.Itoa(count)))
+	ctx.SetBody([]byte(strconv.Itoa(count)))
 }
 
-func httpError(w http.ResponseWriter, r *http.Request, err error, code int) {
-	log.Printf("%s: %s\n", r.URL.Path, err)
-	http.Error(w, err.Error(), code)
+func httpError(ctx *fasthttp.RequestCtx, err error, code int) {
+	log.Printf("%s: %s\n", ctx.Path(), err)
+	ctx.Error(err.Error(), code)
 }

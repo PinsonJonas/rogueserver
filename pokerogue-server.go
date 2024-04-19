@@ -4,11 +4,14 @@ import (
 	"encoding/gob"
 	"flag"
 	"log"
-	"net/http"
+	"strings"
 
 	"github.com/pagefaultgames/pokerogue-server/api"
 	"github.com/pagefaultgames/pokerogue-server/db"
+	"github.com/valyala/fasthttp"
 )
+
+var serveStaticContent fasthttp.RequestHandler
 
 func main() {
 	// flag stuff
@@ -36,18 +39,52 @@ func main() {
 	}
 
 	// start web server
-	mux := http.NewServeMux()
-
-	api.Init(mux)
-
-	mux.Handle("/", http.FileServer(http.Dir(*wwwpath)))
+	serveStaticContent = fasthttp.FSHandler(*wwwpath, 0)
+	
+	api.Init()
 	
 	if *tlscert != "" && *tlskey != "" {
-		err = http.ListenAndServeTLS(*addr, *tlscert, *tlskey, mux)
+		err = fasthttp.ListenAndServeTLS(*addr, *tlscert, *tlskey, serve)
 	} else {
-		err = http.ListenAndServe(*addr, mux)
+		err = fasthttp.ListenAndServe(*addr, serve)
 	}
 	if err != nil {
 		log.Fatalf("failed to create http server or server errored: %s", err)
 	}
+}
+
+func serve(ctx *fasthttp.RequestCtx) {
+	if strings.HasPrefix(string(ctx.Path()), "/api") {
+		switch string(ctx.Path()) {
+		case "/api/account/info":
+			api.HandleAccountInfo(ctx)
+		case "/api/account/register":
+			api.HandleAccountRegister(ctx)
+		case "/api/account/login":
+			api.HandleAccountLogin(ctx)
+		case "/api/account/logout":
+			api.HandleAccountLogout(ctx)
+
+		case "/api/game/playercount":
+			api.HandleGamePlayerCount(ctx)
+		case "/api/game/titlestats":
+			api.HandleGameTitleStats(ctx)
+		case "/api/game/classicsessioncount":
+			api.HandleGameClassicSessionCount(ctx)
+
+		case "/api/savedata/get", "/api/savedata/update", "/api/savedata/delete", "/api/savedata/clear":
+			api.HandleSaveData(ctx)
+
+		case "/api/daily/seed":
+			api.HandleDailySeed(ctx)
+		case "/api/daily/rankings":
+			api.HandleDailyRankings(ctx)
+		case "/api/daily/rankingpagecount":
+			api.HandleDailyRankingPageCount(ctx)
+		}
+
+		return
+	}
+
+	serveStaticContent(ctx)
 }
