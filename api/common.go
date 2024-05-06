@@ -54,6 +54,11 @@ func Init(mux *http.ServeMux) {
 	mux.HandleFunc("GET /daily/seed", handleDailySeed)
 	mux.HandleFunc("GET /daily/rankings", handleDailyRankings)
 	mux.HandleFunc("GET /daily/rankingpagecount", handleDailyRankingPageCount)
+
+	// auth
+	mux.HandleFunc("/auth/{provider}/callback", handleProviderCallback)
+	mux.HandleFunc("/auth/{provider}/link", handleProviderLink)
+	mux.HandleFunc("/auth/{provider}/logout", handleProviderLogout)
 }
 
 func tokenFromRequest(r *http.Request) ([]byte, error) {
