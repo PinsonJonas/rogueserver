@@ -18,7 +18,9 @@
 package api
 
 import (
+
 	"database/sql"
+
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -377,6 +379,7 @@ func legacyHandleSaveData(w http.ResponseWriter, r *http.Request) {
 
 		// doesn't return a save, but it works
 		save, err = savedata.Clear(uuid, slot, seed, save.(defs.SessionSaveData))
+
 	}
 	if err != nil {
 		httpError(w, r, err, http.StatusInternalServerError)

@@ -82,6 +82,10 @@ func Init() error {
 		return err
 	}
 
+	if err != nil {
+		return err
+	}
+
 	scheduler.Start()
 
 	return nil

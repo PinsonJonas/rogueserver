@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/pagefaultgames/rogueserver/api"
 	"github.com/pagefaultgames/rogueserver/db"
@@ -31,18 +32,18 @@ import (
 
 func main() {
 	// flag stuff
-	debug := flag.Bool("debug", false, "use debug mode")
+	debug, errDebugBoolParse := strconv.ParseBool(os.Getenv("debug"))
+	if errDebugBoolParse != nil {
+		log.Fatalf("failed to parse debug value: %s", errDebugBoolParse)
+	}
+	proto := "tcp"
+	addr := "0.0.0.0:8001"
 
-	proto := flag.String("proto", "tcp", "protocol for api to use (tcp, unix)")
-	addr := flag.String("addr", "0.0.0.0:8001", "network address for api to listen on")
-	tlscert := flag.String("tlscert", "", "tls certificate path")
-	tlskey := flag.String("tlskey", "", "tls key path")
-
-	dbuser := flag.String("dbuser", "pokerogue", "database username")
-	dbpass := flag.String("dbpass", "pokerogue", "database password")
-	dbproto := flag.String("dbproto", "tcp", "protocol for database connection")
-	dbaddr := flag.String("dbaddr", "localhost", "database address")
-	dbname := flag.String("dbname", "pokeroguedb", "database name")
+	dbuser := os.Getenv("dbuser")
+	dbpass := os.Getenv("dbpass")
+	dbproto := "tcp"
+	dbaddr := os.Getenv("dbaddr")
+	dbname := os.Getenv("dbname")
 
 	flag.Parse()
 
@@ -51,13 +52,13 @@ func main() {
 	gob.Register(map[string]interface{}{})
 
 	// get database connection
-	err := db.Init(*dbuser, *dbpass, *dbproto, *dbaddr, *dbname)
+	err := db.Init(dbuser, dbpass, dbproto, dbaddr, dbname)
 	if err != nil {
 		log.Fatalf("failed to initialize database: %s", err)
 	}
 
 	// create listener
-	listener, err := createListener(*proto, *addr)
+	listener, err := createListener(proto, addr)
 	if err != nil {
 		log.Fatalf("failed to create net listener: %s", err)
 	}
@@ -70,15 +71,11 @@ func main() {
 	}
 
 	// start web server
-	handler := prodHandler(mux)
-	if *debug {
-		handler = debugHandler(mux)
-	}
 
-	if *tlscert == "" {
-		err = http.Serve(listener, handler)
+	if debug == true {
+		err = http.Serve(listener, debugHandler(mux))
 	} else {
-		err = http.ServeTLS(listener, handler, *tlscert, *tlskey)
+		err = http.Serve(listener, mux)
 	}
 	if err != nil {
 		log.Fatalf("failed to create http server or server errored: %s", err)
@@ -89,19 +86,13 @@ func createListener(proto, addr string) (net.Listener, error) {
 	if proto == "unix" {
 		os.Remove(addr)
 	}
-
 	listener, err := net.Listen(proto, addr)
 	if err != nil {
 		return nil, err
 	}
-
 	if proto == "unix" {
-		if err := os.Chmod(addr, 0777); err != nil {
-			listener.Close()
-			return nil, err
-		}
+		os.Chmod(addr, 0777)
 	}
-
 	return listener, nil
 }
 

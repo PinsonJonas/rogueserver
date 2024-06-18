@@ -45,6 +45,7 @@ func Init(username, password, protocol, address, database string) error {
 		log.Fatal(err)
 	}
 
+
 	err = setupDb(tx)
 	if err != nil {
 		tx.Rollback()
